@@ -132,7 +132,6 @@ public class MainActivity extends Activity {
                 Log.v(TAG, info.size + ", " + buf.limit() + ", " + oldPosition);
                 buf.get(dst);
                 buf.position(oldPosition);
-                fos.write(dst);
 
                 // mp3デコードテスト用
                 track.write(dst, 0, dst.length);
