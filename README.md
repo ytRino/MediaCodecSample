@@ -1,0 +1,4 @@
+MediaCodecSample
+================
+
+MediaCodecAPIをつかってエンコードしてみたかった...
