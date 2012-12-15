@@ -66,17 +66,18 @@ public class MainActivity extends Activity {
                 8000/* 適当 */, AudioTrack.MODE_STREAM);
         track.play();
 
-//        String mime = "audio/flac";
-//        MediaFormat outFormat = MediaFormat.createAudioFormat(mime,
-//                format.getInteger(MediaFormat.KEY_SAMPLE_RATE),
-//                format.getInteger(MediaFormat.KEY_CHANNEL_COUNT));
-//        // flac用のkeyがあったのでつけてみた
-//        outFormat.setInteger(MediaFormat.KEY_FLAC_COMPRESSION_LEVEL, 0);
+        //        String mime = "audio/flac";
+        //        MediaFormat outFormat = MediaFormat.createAudioFormat(mime,
+        //                format.getInteger(MediaFormat.KEY_SAMPLE_RATE),
+        //                format.getInteger(MediaFormat.KEY_CHANNEL_COUNT));
+        //        // flac用のkeyがあったのでつけてみた
+        //        outFormat.setInteger(MediaFormat.KEY_FLAC_COMPRESSION_LEVEL, 0);
 
         //parseWavInfo(format, audioId);
 
         //        final MediaCodec codec = MediaCodec.createEncoderByType(mime);
         //        codec.configure(outFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE /* encoder flag */);
+
         final MediaCodec codec = MediaCodec.createDecoderByType(format
                 .getString(MediaFormat.KEY_MIME));
         codec.configure(format, null, null, 0);
@@ -84,10 +85,10 @@ public class MainActivity extends Activity {
 
         extractor.selectTrack(0);
 
-        String fileName = "test.flac";
+        String fileName = "test";
 
-        //new SampleCodecWithExractor(this, codec, extractor, track, fileName).process();
-        new SampleCodecWithInputStream(this, codec, track, audioId, "hoge").process();
+        new SampleCodecWithExractor(this, codec, extractor, track, fileName).process();
+        //new SampleCodecWithInputStream(this, codec, track, audioId, "hoge").process();
 
         codec.stop();
         codec.release();
@@ -281,7 +282,7 @@ public class MainActivity extends Activity {
             } catch (IOException e) {
                 e.printStackTrace();
             }
-            if(sampleSize > 0){
+            if (sampleSize > 0) {
                 int pos = buf.position();
                 buf.put(data);
                 buf.position(pos);
