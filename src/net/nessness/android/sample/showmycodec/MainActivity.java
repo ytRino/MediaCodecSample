@@ -2,6 +2,7 @@
 package net.nessness.android.sample.showmycodec;
 
 import android.app.Activity;
+import android.content.Context;
 import android.content.res.AssetFileDescriptor;
 import android.media.AudioFormat;
 import android.media.AudioManager;
@@ -12,16 +13,17 @@ import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
 import android.media.MediaExtractor;
 import android.media.MediaFormat;
-import android.media.MediaPlayer;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.text.method.ScrollingMovementMethod;
 import android.util.Log;
 import android.widget.TextView;
 
-import java.io.File;
+import java.io.BufferedInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 
 public class MainActivity extends Activity {
@@ -39,7 +41,7 @@ public class MainActivity extends Activity {
             @Override
             public void run() {
                 try {
-                    process(R.raw.nare);
+                    startProcess(R.raw.mp3_1khz);
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
@@ -47,113 +49,78 @@ public class MainActivity extends Activity {
         }.start();
     }
 
-    private void process(int audioId) throws IOException {
+    private void startProcess(int audioId) throws IOException {
 
-        AssetFileDescriptor audioFd = getResources().openRawResourceFd(audioId);
-        MediaExtractor extractor = new MediaExtractor();
+        final AssetFileDescriptor audioFd = getResources().openRawResourceFd(audioId);
+        final MediaExtractor extractor = new MediaExtractor();
         extractor.setDataSource(audioFd.getFileDescriptor(), audioFd.getStartOffset(),
                 audioFd.getLength());
         MediaFormat format = extractor.getTrackFormat(0);
-
         Log.v(TAG, format.toString());
 
-        String mime = format.getString(MediaFormat.KEY_MIME);
-        //String mime = "audio/flac";
-        //MediaFormat format = MediaFormat.createAudioFormat(mime, 44100, 2);
-        //MediaCodec codec = MediaCodec.createEncoderByType(mime);
-        //MediaCodec codec = MediaCodec.createByCodecName("OMX.google.flac.encoder");
-        MediaCodec codec = MediaCodec.createDecoderByType(mime);
-        // エンコードする場合はエンコードフラグをつける
-        //codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
-        codec.configure(format, null, null, 0);
-        codec.start();
-
-        ByteBuffer[] codecInputBuffers = codec.getInputBuffers();
-        ByteBuffer[] codecOutputBuffers = codec.getOutputBuffers();
-
-        // エンコード結果書きだそうと思った
-        //        File file = new File(getFilesDir(), "test.flac");
-        //        file.getParentFile().mkdirs();
-        //        Log.d(TAG, "file: " + file.getAbsolutePath());
-        //        FileOutputStream fos = new FileOutputStream(file);
-
-        extractor.selectTrack(0);
-
-        // nurupo
-        //int sampleRate = format.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE);
-        // mp3デコードテスト用
-        AudioTrack track = new AudioTrack(AudioManager.STREAM_MUSIC,
+        // デコードテスト用
+        // デコードするデータによって適当に変更する必要あり mono/stereoとかformatからとれなかったりするかも
+        final AudioTrack track = new AudioTrack(AudioManager.STREAM_MUSIC,
                 format.getInteger(MediaFormat.KEY_SAMPLE_RATE),
-                AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT,
+                AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT,
                 8000/* 適当 */, AudioTrack.MODE_STREAM);
         track.play();
 
-        BufferInfo info = new BufferInfo();
-        boolean inputEos = false;
-        boolean outputEos = false;
-        long timeoutUs = 1000;
-        while (!outputEos) {
-            Log.v(TAG, "encoding... " + inputEos + ", " + outputEos);
-            if (!inputEos) {
+//        String mime = "audio/flac";
+//        MediaFormat outFormat = MediaFormat.createAudioFormat(mime,
+//                format.getInteger(MediaFormat.KEY_SAMPLE_RATE),
+//                format.getInteger(MediaFormat.KEY_CHANNEL_COUNT));
+//        // flac用のkeyがあったのでつけてみた
+//        outFormat.setInteger(MediaFormat.KEY_FLAC_COMPRESSION_LEVEL, 0);
 
-                int inputBufIndex = codec.dequeueInputBuffer(timeoutUs);
-                if (inputBufIndex >= 0) {
-                    // inputバッファにエンコードするデータを入れる
-                    ByteBuffer buf = codecInputBuffers[inputBufIndex];
-                    Log.v(TAG, buf + ", " + inputBufIndex + ", " + buf.position());
-                    int sampleSize = extractor.readSampleData(buf, 0);
-                    // 長さマイクロ秒
-                    long presentationTimeUs = 0;
-                    if (sampleSize < 0) {
-                        Log.d(TAG, "input EOS.");
-                        inputEos = true;
-                        sampleSize = 0;
-                    } else {
-                        presentationTimeUs = extractor.getSampleTime();
-                    }
+        //parseWavInfo(format, audioId);
 
-                    codec.queueInputBuffer(inputBufIndex, 0, sampleSize, presentationTimeUs,
-                            inputEos ? MediaCodec.BUFFER_FLAG_END_OF_STREAM : 0);
-                    if (!inputEos) {
-                        // 次へ進める
-                        extractor.advance();
-                    }
-                }
-            }
+        //        final MediaCodec codec = MediaCodec.createEncoderByType(mime);
+        //        codec.configure(outFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE /* encoder flag */);
+        final MediaCodec codec = MediaCodec.createDecoderByType(format
+                .getString(MediaFormat.KEY_MIME));
+        codec.configure(format, null, null, 0);
+        codec.start();
 
-            int res = codec.dequeueOutputBuffer(info, timeoutUs);
+        extractor.selectTrack(0);
 
-            if (res >= 0) {
-                int outputBufIndex = res;
-                //fos.write(codecOutputBuffers[outputBufIndex].);
-                ByteBuffer buf = codecOutputBuffers[outputBufIndex];
-                byte[] dst = new byte[info.size];
-                int oldPosition = buf.position();
-                Log.v(TAG, info.size + ", " + buf.limit() + ", " + oldPosition);
-                buf.get(dst);
-                buf.position(oldPosition);
+        String fileName = "test.flac";
 
-                // mp3デコードテスト用
-                track.write(dst, 0, dst.length);
+        //new SampleCodecWithExractor(this, codec, extractor, track, fileName).process();
+        new SampleCodecWithInputStream(this, codec, track, audioId, "hoge").process();
 
-                codec.releaseOutputBuffer(outputBufIndex, false);
-
-                if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
-                    Log.d(TAG, "output eos.");
-                    outputEos = true;
-                }
-            } else if (res == MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED) {
-                Log.d(TAG, "output buffer changed.");
-                codecOutputBuffers = codec.getOutputBuffers();
-            } else if (res == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                MediaFormat f = codec.getOutputFormat();
-                Log.d(TAG, "output format changed. " + f);
-                //track.setPlaybackRate(f.getInteger(MediaFormat.KEY_SAMPLE_RATE));
-            }
-        }
         codec.stop();
         codec.release();
         audioFd.close();
+
+        new FlacHeader(this, fileName).addHeader(format);
+    }
+
+    private void parseWavInfo(MediaFormat format, int wavId) throws IOException {
+        InputStream is = getResources().openRawResource(wavId);
+        int headerSize = 0x2c;
+        byte[] buf = new byte[headerSize];
+        int n = 0, s = 0;
+        // buf にヘッダを読み込む
+        while ((n = is.read(buf, n, headerSize - s)) != -1) {
+            if ((s += n) == headerSize)
+                break;
+        }
+
+        format.setByteBuffer("csd-0", ByteBuffer.wrap(buf));
+
+        Log.v(TAG, "wav header.");
+        FlacHeader.dump(buf);
+
+        int sampleRate = getInt(buf, 0x18);
+        int totalSize = getInt(buf, 0x28) / 4;
+        Log.d(TAG, "sample rate: " + sampleRate + ", totalSize: " + totalSize);
+    }
+
+    // リトルエンディアン
+    private int getInt(byte[] buf, int start) {
+        return ((((((buf[start + 3] & 0xff) << 8) | (buf[start + 2] & 0xff)) << 8) | (buf[start + 1] & 0xff)) << 8)
+                | (buf[start] & 0xff);
     }
 
     private void listAvailableCodecs() {
@@ -171,4 +138,190 @@ public class MainActivity extends Activity {
         }
     }
 
+    private static class SampleCodecWithExractor extends Codec {
+
+        private MediaExtractor mExtractor;
+        private AudioTrack mTrack;
+        private FileOutputStream mFos;
+
+        public SampleCodecWithExractor(Context ctx, MediaCodec codec, MediaExtractor extractor,
+                AudioTrack track, String outFile) {
+            super(codec);
+            mExtractor = extractor;
+            mTrack = track;
+            try {
+                mFos = ctx.openFileOutput(outFile, Context.MODE_PRIVATE);
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+            }
+        }
+
+        @Override
+        public void process() {
+            super.process();
+            try {
+                mFos.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        protected int totalSamples = 0;
+
+        boolean first = true;
+
+        @Override
+        protected int readSampleData(ByteBuffer buf) {
+            int s = mExtractor.readSampleData(buf, 0);
+            totalSamples += s;
+
+            int pos = buf.position();
+            byte[] data = new byte[buf.limit() - pos];
+            buf.get(data);
+            buf.position(pos);
+            Log.d(TAG, "sample: " + s + ", total: " + totalSamples + ", " + pos);
+            FlacHeader.dump(data, 0, 0x10);
+            return s;
+        }
+
+        @Override
+        protected long getSampleTime() {
+            return mExtractor.getSampleTime();
+        }
+
+        @Override
+        protected void advance() {
+            mExtractor.advance();
+        }
+
+        @Override
+        protected void readOutputBuffer(ByteBuffer buf, BufferInfo info) {
+            Log.v(TAG, "output: " + Integer.toBinaryString(info.flags));
+            byte[] data = new byte[info.size];
+            int pos = buf.position();
+            buf.get(data);
+            buf.position(pos);
+
+            FlacHeader.dump(data, 0, 0x10);
+
+            if (mTrack != null) {
+                mTrack.write(data, 0, data.length);
+            }
+            try {
+                mFos.write(data);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        @Override
+        protected void outputFormatChanged() {
+            super.outputFormatChanged();
+        }
+    }
+
+    private static class SampleCodecWithInputStream extends Codec {
+
+        private static final String TAG = SampleCodecWithInputStream.class.getSimpleName();
+
+        protected AudioTrack mTrack;
+        protected FileOutputStream mFos;
+        protected BufferedInputStream mBis;
+        protected int mSampleTimeUs;
+
+        public SampleCodecWithInputStream(Context ctx, MediaCodec codec,
+                AudioTrack track, String inFile, String outFile) {
+            super(codec);
+
+            try {
+                init(ctx, track, outFile);
+                mBis = new BufferedInputStream(ctx.openFileInput(inFile));
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+            }
+        }
+
+        public SampleCodecWithInputStream(Context ctx, MediaCodec codec,
+                AudioTrack track, int inId, String outFile) {
+            super(codec);
+            try {
+                init(ctx, track, outFile);
+                mBis = new BufferedInputStream(ctx.getResources().openRawResource(inId));
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+            }
+        }
+
+        private void init(Context ctx, AudioTrack track, String outFile)
+                throws FileNotFoundException {
+            mTrack = track;
+            mSampleTimeUs = 0;
+            mFos = ctx.openFileOutput(outFile, Context.MODE_PRIVATE);
+        }
+
+        @Override
+        public void process() {
+            super.process();
+            try {
+                mBis.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        boolean first = true;
+
+        @Override
+        protected int readSampleData(ByteBuffer buf) {
+            // かなりアヤシイ実装
+            int sampleSize = 0;
+            byte[] data = new byte[2048];
+            try {
+                sampleSize = mBis.read(data);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            if(sampleSize > 0){
+                int pos = buf.position();
+                buf.put(data);
+                buf.position(pos);
+            }
+            Log.v(TAG, "input: " + sampleSize + ", " + data.length + ", " + buf.position());
+            return sampleSize;
+        }
+
+        @Override
+        protected long getSampleTime() {
+            // デコードのときに適当な数字を返して場合も普通に再生できてしまった
+            //Log.v(TAG, "sampletime: " + mSampleTimeUs);
+            return mSampleTimeUs;
+        }
+
+        @Override
+        protected void advance() {
+        }
+
+        boolean ofirst = true;
+
+        @Override
+        protected void readOutputBuffer(ByteBuffer buf, BufferInfo info) {
+            Log.v(TAG,
+                    "output size: " + info.size + ", flag: " + Integer.toBinaryString(info.flags));
+            byte[] data = new byte[info.size];
+            int pos = buf.position();
+            buf.get(data);
+
+            FlacHeader.dump(data, 0, 0x10);
+
+            if (mTrack != null) {
+                mTrack.write(data, 0, data.length);
+            }
+            try {
+                mFos.write(data);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            buf.position(pos);
+        }
+    }
 }
